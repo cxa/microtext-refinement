@@ -121,7 +121,7 @@
           (buffer-substring-no-properties beg end)
         (message "No conflict markers found.")))))
 
-(defvar mtr--region nil)
+(defvar mtr--active-region nil)
 (defvar mtr--buffer nil)
 
 (defun mtr--handle-response (target-buffer response info)
@@ -129,14 +129,16 @@
   (cond
    ((null response)
     (message "Failed to refine%s"
-             (if-let ((msg (plist-get info :error))) (format ": %s" msg) ".")))
+             (if-let ((msg (plist-get info :error)))
+                 (format ", reason: %s" msg)
+               "")))
    (t
     (mtr--explain response)
     (let ((refine-text
            (with-current-buffer mtr--buffer
              (mtr--smerge-lower-part)))
-          (beg (car mtr--region))
-          (end (cdr mtr--region)))
+          (beg (car mtr--active-region))
+          (end (cdr mtr--active-region)))
       (unless refine-text (user-error "Invalid response."))
       (with-current-buffer target-buffer
         (delete-region beg end)
@@ -145,18 +147,17 @@
         (pulse-momentary-highlight-region beg (point)))
       (with-current-buffer mtr--buffer
         (gptel--update-status " Refined" 'success))
-      (message "Refined with %s" (gptel-backend-name gptel-backend))))))
+      (message "Refined with %s"
+               (gptel-backend-name (or mtr-gptel-backend gptel-backend)))))))
 
 ;;;###autoload
-(defun mtr-refine ()
+(defun mtr-refine (beg end)
   "Refine region."
-  (interactive)
-  (unless (region-active-p)
-    (user-error "No text to refine, make a selection first."))
-  (let ((beg (region-beginning))
-        (end (region-end))
-        (gptel-backend (or mtr-gptel-backend gptel-backend)))
-    (setq mtr--region (cons beg end))
+  (interactive (if (region-active-p)
+                   (list (region-beginning) (region-end))
+                 (error "No text to refine, make a selection first.")))
+  (setq mtr--active-region (cons beg end))
+  (let ((gptel-backend (or mtr-gptel-backend gptel-backend)))
     (unless (buffer-live-p mtr--buffer)
       (setq mtr--buffer (gptel mtr-buffer-name)))
     (gptel--update-status " Waiting..." 'warning)
